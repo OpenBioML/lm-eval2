@@ -2,6 +2,7 @@ import argparse
 import json
 import logging
 import fnmatch
+import wandb
 
 from lm_eval import tasks, evaluator
 
@@ -40,6 +41,9 @@ def parse_args():
     parser.add_argument("--decontamination_ngrams_path", default=None)
     parser.add_argument("--description_dict_path", default=None)
     parser.add_argument("--check_integrity", action="store_true")
+    parser.add_argument("--wandb_log", type=bool, default=False)
+    parser.add_argument("--wandb_project", type=str, default=None)
+    parser.add_argument("--wandb_run_name", type=str, default=None)
 
     return parser.parse_args()
 
@@ -57,10 +61,9 @@ def pattern_match(patterns, source_list):
 def main():
     args = parse_args()
 
-    if args.limit:
-        print(
-            "WARNING: --limit SHOULD ONLY BE USED FOR TESTING. REAL METRICS SHOULD NOT BE COMPUTED USING LIMIT."
-        )
+    if args.wandb_log:
+        assert (wandb_project is not None) and (wandb_run_name is not None)
+        wandb.init(project=args.wandb_project, name=argd.wandb_run_name, config=args)
 
     if args.tasks is None:
         task_names = tasks.ALL_TASKS
@@ -84,15 +87,13 @@ def main():
     dumped = json.dumps(results, indent=2)
     print(dumped)
 
-    if args.output_path:
-        with open(args.output_path, "w") as f:
-            f.write(dumped)
-
-    print(
-        f"{args.model} ({args.model_args}), limit: {args.limit}, provide_description: {args.provide_description}, "
-        f"num_fewshot: {args.num_fewshot}, batch_size: {args.batch_size}"
-    )
-    print(evaluator.make_table(results))
+    if args.wandb_log:
+    # TODO: where is "filter" coming from?
+        for task, metrics in dumped["results"].items():
+            # wandb.log(
+            #     f"{task.split()[0]}_{metric}": value for metric, value in metrics.items()
+            #     )
+            wandb.log({task.split()[0]: metrics})
 
 
 if __name__ == "__main__":

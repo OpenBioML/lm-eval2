@@ -37,6 +37,7 @@ setuptools.setup(
         "tqdm-multiprocess",
         "transformers>=4.1",
         "zstandard",
+        "wandb",
     ],
     extras_require={
         "dev": ["black", "flake8", "pre-commit", "pytest", "pytest-cov"],
