@@ -62,8 +62,8 @@ def main():
     args = parse_args()
 
     if args.wandb_log:
-        assert (wandb_project is not None) and (wandb_run_name is not None)
-        wandb.init(project=args.wandb_project, name=argd.wandb_run_name, config=args)
+        assert (args.wandb_project is not None) and (args.wandb_run_name is not None)
+        wandb.init(project=args.wandb_project, name=args.wandb_run_name, config=args)
 
     if args.tasks is None:
         task_names = tasks.ALL_TASKS
@@ -89,10 +89,7 @@ def main():
 
     if args.wandb_log:
     # TODO: where is "filter" coming from?
-        for task, metrics in dumped["results"].items():
-            # wandb.log(
-            #     f"{task.split()[0]}_{metric}": value for metric, value in metrics.items()
-            #     )
+        for task, metrics in results["results"].items():
             wandb.log({task.split()[0]: metrics})
 
 
