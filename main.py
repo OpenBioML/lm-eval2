@@ -2,38 +2,46 @@ import argparse
 import json
 import logging
 import fnmatch
-import wandb
-from pathlib import Path
-from typing import Union
-import yaml
-from pydantic import BaseModel
 
 from lm_eval import tasks, evaluator
 
 logging.getLogger("openai").setLevel(logging.WARNING)
 
 
-def load_config(path: Union[str, Path]):
-    with open(path, "r") as stream:
-        try:
-            return yaml.safe_load(stream)
-        except yaml.YAMLError as exc:
-            print(exc)
+class MultiChoice:
+    def __init__(self, choices):
+        self.choices = choices
+
+    # Simple wildcard support (linux filename patterns)
+    def __contains__(self, values):
+        for value in values.split(","):
+            if len(fnmatch.filter(self.choices, value)) == 0:
+                return False
+
+        return True
+
+    def __iter__(self):
+        for choice in self.choices:
+            yield choice
 
 
-class EvalPipelineConfig(BaseModel):
-    model: str
-    model_args: str = ""
-    tasks: str = None # check the types
-    num_fewshot: int = 0
-    batch_size: int = None
-    device: str = None
-    limit: int = None
-    decontamination_ngrams_path: str = None
-    check_integrity: bool = False
-    wandb_log: bool = False
-    wandb_project: str = None
-    wandb_run_name: str = None
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--model", required=True)
+    parser.add_argument("--model_args", default="")
+    parser.add_argument("--tasks", default=None, choices=MultiChoice(tasks.ALL_TASKS))
+    parser.add_argument("--provide_description", action="store_true")
+    parser.add_argument("--num_fewshot", type=int, default=0)
+    parser.add_argument("--batch_size", type=int, default=None)
+    parser.add_argument("--device", type=str, default=None)
+    parser.add_argument("--output_path", default=None)
+    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--no_cache", action="store_true")
+    parser.add_argument("--decontamination_ngrams_path", default=None)
+    parser.add_argument("--description_dict_path", default=None)
+    parser.add_argument("--check_integrity", action="store_true")
+
+    return parser.parse_args()
 
 
 # Returns a list containing all values of the source_list that
@@ -46,14 +54,13 @@ def pattern_match(patterns, source_list):
     return list(task_names)
 
 
-def main(config_path: str) -> None:
+def main():
+    args = parse_args()
 
-    raw_config = load_config(config_path)
-    args = EvalPipelineConfig(**raw_config)
-
-    if args.wandb_log:
-        assert (args.wandb_project is not None) and (args.wandb_run_name is not None)
-        wandb.init(project=args.wandb_project, name=args.wandb_run_name, config=args)
+    if args.limit:
+        print(
+            "WARNING: --limit SHOULD ONLY BE USED FOR TESTING. REAL METRICS SHOULD NOT BE COMPUTED USING LIMIT."
+        )
 
     if args.tasks is None:
         task_names = tasks.ALL_TASKS
@@ -77,14 +84,16 @@ def main(config_path: str) -> None:
     dumped = json.dumps(results, indent=2)
     print(dumped)
 
-    if args.wandb_log:
-    # TODO: where is "filter" coming from?
-        for task, metrics in results["results"].items():
-            wandb.log({task.split()[0]: metrics})
+    if args.output_path:
+        with open(args.output_path, "w") as f:
+            f.write(dumped)
+
+    print(
+        f"{args.model} ({args.model_args}), limit: {args.limit}, provide_description: {args.provide_description}, "
+        f"num_fewshot: {args.num_fewshot}, batch_size: {args.batch_size}"
+    )
+    print(evaluator.make_table(results))
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("config_path", help="The full path to the YAML config file.")
-    args = parser.parse_args()
-    main(args.config_path)
+    main()
